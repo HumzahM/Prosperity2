@@ -22,6 +22,6 @@ def recursiveMax(stepsLeft, i, value, path):
         return (max_value, best_path)
 
 # Start from the bottom row (index 3), initial value is 1, empty path initially
-result_value, result_path = recursiveMax(3, 3, 1, [])
+result_value, result_path = recursiveMax(5, 3, 1, [])
 print("Maximum Value:", result_value)
 print("Path:", result_path)
