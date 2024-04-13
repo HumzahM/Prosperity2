@@ -9,9 +9,9 @@ data = np.genfromtxt('midpoint.csv')
 def find_best_n(n):
     X = []
     y = []
-    for i in range(len(data) - n):
+    for i in range(len(data) - n - n):
         X.append(data[i:i+n])
-        y.append(data[i+n])
+        y.append(data[i+n+n])
 
     X = np.array(X)
     y = np.array(y)
@@ -20,15 +20,13 @@ def find_best_n(n):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Train the linear regression model
-    model = LinearRegression()
+    model = LinearRegression(fit_intercept=False)
     model.fit(X_train, y_train)
 
     # Evaluate the model
     score = model.coef_
     r_sq = model.score(X_test, y_test)
-    intercept = model.intercept_
     print("Coefficients:", score)
-    print("Intercept:", intercept)
     print("R^2:", r_sq)
     return r_sq
 

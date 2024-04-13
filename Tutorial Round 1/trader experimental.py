@@ -5,19 +5,6 @@ import jsonpickle
 import numpy as np
 
 class Trader:
-    def predict_next(self, sequence: list[float]) -> float:
-        coef = [-0.15, -0.05,  0.05,  0.15,  1] #gets 3.21K
-        #coef = [1]
-        if(len(sequence) != len(coef)):
-            print("Invalid sequence length, returning last value")
-            return sequence[-1]
-        
-        next_price = 0
-        for i, val in enumerate(sequence):
-            next_price += val * coef[i]
-
-        return next_price
-
     def ordersSimpleMarketMaking(self, product: str, order_depth: OrderDepth, position: int, positionLimit: int, fair_price: int, bid_ask_spread) -> List[Order]:
 
         best_ask, best_ask_amount = list(order_depth.sell_orders.items())[0]
@@ -66,14 +53,14 @@ class Trader:
         if(maxToSell > 0):
             orders.append(Order(product, final_sell_price, -maxToSell))
             
-
-        print("simple orders: " + str(orders))
+        #print("simple orders: " + str(orders))
 
         return orders
 
     def run(self, state: TradingState):
         POSITION_LIMITS = {'AMETHYSTS': 20, 'STARFRUIT': 20}
-        BID_ASK_SPREADS = {'AMETHYSTS': 3, 'STARFRUIT': 1.9} #half of spread
+        BID_ASK_SPREADS = {'AMETHYSTS': 3, 'STARFRUIT': 2} #half of spread
+        pInformed = {'AMETHYSTS': 0, 'STARFRUIT': 0.4}
         STARFRUIT_DATA_LENGTH = 5
         result = {}
         #######################
@@ -95,47 +82,43 @@ class Trader:
                 # For this example, decoded_data remains an empty dictionary
 
         # Check if 'STARFRUIT_HISTORY' exists in decoded_data, otherwise initialize it
-        starfruit_history = decoded_data.get('STARFRUIT_HISTORY', [])
-        starfruit_price = 0
-        starfruit_volume = 0
-        for ask, amount in state.order_depths['STARFRUIT'].sell_orders.items():
-            starfruit_price += abs(ask*amount)
-            starfruit_volume += abs(amount)
+        starfruit_fair_price = decoded_data.get('STARFRUIT_FAIR_PRICE', 0)
+        if starfruit_fair_price == 0:
+            print("Lost fair price data")
+            starfruit_price = 0
+            starfruit_volume = 0
+            for ask, amount in state.order_depths['STARFRUIT'].sell_orders.items():
+                starfruit_price += abs(ask*amount)
+                starfruit_volume += abs(amount)
 
-        for bid, amount in state.order_depths['STARFRUIT'].buy_orders.items():
-            starfruit_price += abs(bid*amount)
-            starfruit_volume += abs(amount)
+            for bid, amount in state.order_depths['STARFRUIT'].buy_orders.items():
+                starfruit_price += abs(bid*amount)
+                starfruit_volume += abs(amount)
 
-        if starfruit_volume != 0:
-            starfruit_midpoint = starfruit_price / starfruit_volume
-        else:
-            starfruit_midpoint = starfruit_history[-1]
+            if starfruit_volume != 0:
+                starfruit_fair_price = starfruit_price / starfruit_volume
+            else:
+                starfruit_fair_price = 5000 #lets hope it doesn't get here
+                print("No volume")
 
-        starfruit_history.append(starfruit_midpoint)
-        starfruit_history = starfruit_history[-STARFRUIT_DATA_LENGTH:]
-        starfruit_fair_price = self.predict_next(starfruit_history)
+        print(state.own_trades.get('STARFRUIT', []))
+
+        old_price = starfruit_fair_price
+
+        if len(state.own_trades.get('STARFRUIT', [])) > 0:
+            for trade in state.own_trades['STARFRUIT']:
+                if trade.timestamp == state.timestamp - 100:
+                    starfruit_fair_price = starfruit_fair_price + (trade.price - old_price) * pInformed['STARFRUIT']
+                    print("old price: " + str(old_price) + " new price: " + str(starfruit_fair_price))
 
         result['STARFRUIT'] = self.ordersSimpleMarketMaking('STARFRUIT', state.order_depths['STARFRUIT'], state.position.get('STARFRUIT', 0), POSITION_LIMITS['STARFRUIT'], starfruit_fair_price, BID_ASK_SPREADS['STARFRUIT'])
 
-        traderData = {'STARFRUIT_HISTORY': starfruit_history}
-
-        if 'AMETHYSTS' in state.market_trades or 'STARFRUIT' in state.market_trades:
-            print("Trades we missed out on: ")
-
-            if 'AMETHYSTS' in state.market_trades:
-                for trade in state.market_trades['AMETHYSTS']:
-                    if trade.buyer != "SUBMISSION" and trade.seller != "SUBMISSION":
-                        print(" " + str(trade))
-
-            if 'STARFRUIT' in state.market_trades:
-                print("Starfruit fair price: " + str(starfruit_fair_price) + " ")
-                for trade in state.market_trades['STARFRUIT']:
-                    if trade.buyer != "SUBMISSION" and trade.seller != "SUBMISSION":
-                        print(str(trade) + " " + str(abs(trade.price - starfruit_fair_price)) + " ")
-
-        else:
-            print("No trades missed")
+        #######################
+        #Output and Other
+        #######################
         
+        traderData = {'STARFRUIT_FAIR_PRICE': starfruit_fair_price}
+
         return result, 0, jsonpickle.encode(traderData)
             
 
