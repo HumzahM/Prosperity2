@@ -71,7 +71,7 @@ class Trader:
 
         return orders
     
-    def orchidArbitrage(self, order_depth: OrderDepth, position: int, positionLimit: int, orchid_state: str, obs: ConversionObservation, ownTrades: List[Order], timestamp: int) -> Tuple[List[Order], int, str]:
+    def orchidArbitrage(self, order_depth: OrderDepth, position: int, positionLimit: int, obs: ConversionObservation, ownTrades: List[Order], timestamp: int) -> Tuple[List[Order], int]:
         north_best_bid, north_best_bid_amount = list(order_depth.buy_orders.items())[0]
         north_best_ask, north_best_ask_amount = list(order_depth.sell_orders.items())[0]
 
@@ -87,7 +87,6 @@ class Trader:
         maxToBuy = positionLimit - position # positive number -> max is 40 
         maxToSell = position + positionLimit # positive number -> max is 40
 
-        print("Current State: ", orchid_state)
         print("Position: ", position)
         print("North Market - Best Bid: ", north_best_bid,)
         print("North Market - Best Ask: ", north_best_ask, " Adjusted Ask: ", north_adjusted_best_ask)
@@ -95,37 +94,22 @@ class Trader:
         print("South Market - Bid: ", south_bid, " Adjusted Bid: ", south_adjusted_bid)
         print("South Market - Ask: ", south_ask, " Adjusted Ask: ", south_adjusted_ask)
 
-        conversion_requests = 0
-
-        if orchid_state == "convert next":
-            print("Action: Convert next - clearing position")
-            conversion_requests = abs(position)
-
-        if orchid_state == "watch for conversion":
-            if len(ownTrades) > 0:
-                for trade in ownTrades:
-                    if trade.timestamp == timestamp - 100:
-                        print("Action: Performing conversion - clearing position")
-                        conversion_requests = abs(position)
-                print("No trade found - no conversion performed")
+        conversion_requests = abs(position)
+        orders = []
 
         # very extreme arbitrage
         if north_best_bid > south_adjusted_ask:
             print("Action: Buying on South, Selling on North - Immediate arbitrage opportunity")
-            return [Order("ORCHIDS", north_best_bid, -north_best_bid_amount)], conversion_requests, "convert next"
+            orders.append(Order("ORCHIDS", north_best_bid, -north_best_bid_amount))
+            maxToSell -= abs(north_best_bid_amount)
 
         if north_adjusted_best_ask < south_adjusted_bid:
             print("Action: Buying at North Ask, Selling at South Bid - Immediate arbitrage opportunity")
-            return [Order("ORCHIDS", north_best_ask, -north_best_ask_amount)], conversion_requests, "convert next"
-        
-        #bid and ask are inside the spread
-        if north_best_bid < south_adjusted_bid and north_adjusted_best_ask > south_adjusted_ask:
-            print("Action: Submit limit order on North (lower bid, higher ask), immediate convert if filled")
-            return [Order("ORCHIDS", north_best_bid, maxToBuy), Order("ORCHIDS", north_best_ask, -maxToSell)], conversion_requests, "watch for conversion"
+            orders.append(Order("ORCHIDS", north_best_ask, north_best_ask_amount))
+            maxToBuy -= abs(north_best_ask_amount)
 
         #both bid and ask are higher/lower
         if north_adjusted_best_ask > south_adjusted_ask:
-            #price = int(math.floor(min(north_best_ask - 1, south_adjusted_ask + 2))) #gets 46k
             print("Action: Submit limit order on North (higher ask), immediate convert if filled")
             difference = north_adjusted_best_ask - south_adjusted_ask
             if difference == 1:
@@ -133,23 +117,21 @@ class Trader:
             elif difference == 2:
                 price = north_best_ask - 1
             else:
-                price = int(math.floor(min(north_best_ask - 1, south_adjusted_ask + 2)))
-            return [Order("ORCHIDS", price, -maxToSell)], conversion_requests, "watch for conversion"
+                price = int(math.floor(south_adjusted_ask + 2))
+            orders.append(Order("ORCHIDS", price, -maxToSell))
 
         if north_best_bid < south_adjusted_bid:
             print("Action: Submit limit order on North (lower bid), immediate convert if filled")
-            #price = int(math.ceil(max(north_best_bid + 1, south_adjusted_bid - 2))) #gets 46k
             difference = south_adjusted_bid - north_best_bid
             if difference == 1:
                 price = north_best_bid
             elif difference == 2:
                 price = north_best_bid + 1
             else:
-                price = int(math.ceil(max(north_best_bid + 1, south_adjusted_bid - 2)))
-            return [Order("ORCHIDS", price, maxToBuy)], conversion_requests, "watch for conversion"
+                price = int(math.ceil(south_adjusted_bid - 2))
+            orders.append(Order("ORCHIDS", price, maxToBuy))
 
-        print("No viable action found - maintaining current state")
-        return [], conversion_requests, "none"
+        return orders, conversion_requests
 
 
     def run(self, state: TradingState):
@@ -219,9 +201,8 @@ class Trader:
         #Orchids
         #######################
 
-        orchid_data = decoded_data.get('ORCHID_DATA', "none")
-        result['ORCHIDS'], conversion_requests, orchid_data = self.orchidArbitrage(state.order_depths['ORCHIDS'], state.position.get('ORCHIDS', 0), POSITION_LIMITS['ORCHIDS'], orchid_data, state.observations.conversionObservations['ORCHIDS'], state.own_trades.get('ORCHIDS', []), state.timestamp)
-        traderData = {'STARFRUIT_HISTORY': starfruit_history, 'ORCHID_DATA': orchid_data}
+        result['ORCHIDS'], conversion_requests = self.orchidArbitrage(state.order_depths['ORCHIDS'], state.position.get('ORCHIDS', 0), POSITION_LIMITS['ORCHIDS'], state.observations.conversionObservations['ORCHIDS'], state.own_trades.get('ORCHIDS', []), state.timestamp)
+        traderData = {'STARFRUIT_HISTORY': starfruit_history}
         return result, conversion_requests, jsonpickle.encode(traderData)
             
 
