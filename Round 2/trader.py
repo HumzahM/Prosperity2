@@ -125,13 +125,27 @@ class Trader:
 
         #both bid and ask are higher/lower
         if north_adjusted_best_ask > south_adjusted_ask:
+            #price = int(math.floor(min(north_best_ask - 1, south_adjusted_ask + 2))) #gets 46k
             print("Action: Submit limit order on North (higher ask), immediate convert if filled")
-            price = int(math.floor(min(north_best_ask, south_adjusted_ask+2))) #gets 45k
+            difference = north_adjusted_best_ask - south_adjusted_ask
+            if difference == 1:
+                price = north_best_ask
+            elif difference == 2:
+                price = north_best_ask - 1
+            else:
+                price = int(math.floor(min(north_best_ask - 1, south_adjusted_ask + 2)))
             return [Order("ORCHIDS", price, -maxToSell)], conversion_requests, "watch for conversion"
 
         if north_best_bid < south_adjusted_bid:
             print("Action: Submit limit order on North (lower bid), immediate convert if filled")
-            price = int(math.ceil(max(north_best_bid, south_adjusted_bid-2))) #gets 45k
+            #price = int(math.ceil(max(north_best_bid + 1, south_adjusted_bid - 2))) #gets 46k
+            difference = south_adjusted_bid - north_best_bid
+            if difference == 1:
+                price = north_best_bid
+            elif difference == 2:
+                price = north_best_bid + 1
+            else:
+                price = int(math.ceil(max(north_best_bid + 1, south_adjusted_bid - 2)))
             return [Order("ORCHIDS", price, maxToBuy)], conversion_requests, "watch for conversion"
 
         print("No viable action found - maintaining current state")
