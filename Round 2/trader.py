@@ -6,8 +6,8 @@ import numpy as np
 
 class Trader:
     def predict_next(self, sequence: list[float]) -> float:
-        coef = [-0.15, -0.05,  0.05,  0.15,  1] #gets 3.21K
-        #coef = [1]
+        #coef = [-0.15, -0.05,  0.05,  0.15,  1] #gets 3.21K
+        coef = [1]
         if(len(sequence) != len(coef)):
             #print("Invalid sequence length, returning last value")
             return sequence[-1]
@@ -109,6 +109,7 @@ class Trader:
                         conversion_requests = abs(position)
                 print("No trade found - no conversion performed")
 
+        # very extreme arbitrage
         if north_best_bid > south_adjusted_ask:
             print("Action: Buying on South, Selling on North - Immediate arbitrage opportunity")
             return [Order("ORCHIDS", north_best_bid, -north_best_bid_amount)], conversion_requests, "convert next"
@@ -116,14 +117,22 @@ class Trader:
         if north_adjusted_best_ask < south_adjusted_bid:
             print("Action: Buying at North Ask, Selling at South Bid - Immediate arbitrage opportunity")
             return [Order("ORCHIDS", north_best_ask, -north_best_ask_amount)], conversion_requests, "convert next"
+        
+        #bid and ask are inside the spread
+        if north_best_bid < south_adjusted_bid and north_adjusted_best_ask > south_adjusted_ask:
+            print("Action: Submit limit order on North (lower bid, higher ask), immediate convert if filled")
+            return [Order("ORCHIDS", north_best_bid, maxToBuy), Order("ORCHIDS", north_best_ask, -maxToSell)], conversion_requests, "watch for conversion"
 
-        if north_best_bid > south_adjusted_bid and north_adjusted_best_ask > south_adjusted_ask:
+        #both bid and ask are higher/lower
+        if north_adjusted_best_ask > south_adjusted_ask:
             print("Action: Submit limit order on North (higher ask), immediate convert if filled")
-            return [Order("ORCHIDS", north_best_ask, -maxToSell)], conversion_requests, "watch for conversion"
+            price = int(math.floor(min(north_best_ask, south_adjusted_ask+2))) #gets 45k
+            return [Order("ORCHIDS", price, -maxToSell)], conversion_requests, "watch for conversion"
 
-        if north_best_bid < south_adjusted_bid and north_adjusted_best_ask < south_adjusted_ask:
+        if north_best_bid < south_adjusted_bid:
             print("Action: Submit limit order on North (lower bid), immediate convert if filled")
-            return [Order("ORCHIDS", north_best_bid, maxToBuy)], conversion_requests, "watch for conversion"
+            price = int(math.ceil(max(north_best_bid, south_adjusted_bid-2))) #gets 45k
+            return [Order("ORCHIDS", price, maxToBuy)], conversion_requests, "watch for conversion"
 
         print("No viable action found - maintaining current state")
         return [], conversion_requests, "none"
