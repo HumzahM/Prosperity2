@@ -98,37 +98,48 @@ class Trader:
         orders = []
 
         # very extreme arbitrage
-        if north_best_bid > south_adjusted_ask:
-            print("Action: Buying on South, Selling on North - Immediate arbitrage opportunity")
-            orders.append(Order("ORCHIDS", north_best_bid, -north_best_bid_amount))
-            maxToSell -= abs(north_best_bid_amount)
+        for bid, amount in reversed(order_depth.buy_orders.items()):
+            if bid > south_adjusted_ask:
+                if amount > maxToSell:
+                    orders.append(Order("ORCHIDS", bid, -maxToSell))
+                    maxToSell = 0
+                else:
+                    orders.append(Order("ORCHIDS", bid, -amount))
+                    maxToSell -= amount
 
-        if north_adjusted_best_ask < south_adjusted_bid:
-            print("Action: Buying at North Ask, Selling at South Bid - Immediate arbitrage opportunity")
-            orders.append(Order("ORCHIDS", north_best_ask, north_best_ask_amount))
-            maxToBuy -= abs(north_best_ask_amount)
+        for ask, amount in reversed(order_depth.sell_orders.items()):
+            if ask < south_adjusted_bid:
+                if (-amount) > maxToBuy:
+                    orders.append(Order("ORCHIDS", ask, maxToBuy))
+                    maxToBuy = 0
+                else:
+                    orders.append(Order("ORCHIDS", ask, -amount))
+                    maxToBuy += amount
 
         #both bid and ask are higher/lower
-        if north_adjusted_best_ask > south_adjusted_ask:
+        if north_adjusted_best_ask >= south_adjusted_ask:
             print("Action: Submit limit order on North (higher ask), immediate convert if filled")
             difference = north_adjusted_best_ask - south_adjusted_ask
-            if difference == 1:
-                price = north_best_ask
-            elif difference == 2:
-                price = north_best_ask - 1
+            if difference <= 1:
+                price = north_adjusted_best_ask
+            if difference <= 2.5:
+                price = south_adjusted_ask + 1
             else:
-                price = int(math.floor(south_adjusted_ask + 2))
+                price = south_adjusted_ask + 2.5
+            ##ADD CODE ABOUT A MINI ORDER HERE
+            price = int(math.floor(price))
             orders.append(Order("ORCHIDS", price, -maxToSell))
 
         if north_best_bid < south_adjusted_bid:
             print("Action: Submit limit order on North (lower bid), immediate convert if filled")
             difference = south_adjusted_bid - north_best_bid
-            if difference == 1:
+            if difference <= 1:
                 price = north_best_bid
-            elif difference == 2:
-                price = north_best_bid + 1
+            if difference <= 2.5:
+                price = south_adjusted_bid - 1
             else:
-                price = int(math.ceil(south_adjusted_bid - 2))
+                price = south_adjusted_bid - 2.5
+            price = int(math.ceil(price))
             orders.append(Order("ORCHIDS", price, maxToBuy))
 
         return orders, conversion_requests
