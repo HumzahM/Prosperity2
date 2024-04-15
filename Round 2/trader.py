@@ -84,28 +84,33 @@ class Trader:
         south_adjusted_bid = south_bid - obs.exportTariff - obs.transportFees
         south_adjusted_ask = south_ask + obs.importTariff + obs.transportFees
 
-        maxToBuy = positionLimit - position # positive number -> max is 40 
-        maxToSell = position + positionLimit # positive number -> max is 40
+        maxToBuy = 100 # positive number -> max is 40 
+        maxToSell = 100 # positive number -> max is 40
 
         print("Position: ", position)
-        print("North Market - Best Bid: ", north_best_bid,)
-        print("North Market - Best Ask: ", north_best_ask, " Adjusted Ask: ", north_adjusted_best_ask)
-        print("Import Tariff: ", obs.importTariff, " Export Tariff: ", obs.exportTariff, " Transport Fees: ", obs.transportFees)
-        print("South Market - Bid: ", south_bid, " Adjusted Bid: ", south_adjusted_bid)
-        print("South Market - Ask: ", south_ask, " Adjusted Ask: ", south_adjusted_ask)
+        # print("North Market - Best Bid: ", north_best_bid,)
+        # print("North Market - Best Ask: ", north_best_ask, " Adjusted Ask: ", north_adjusted_best_ask)
+        # print("Import Tariff: ", obs.importTariff, " Export Tariff: ", obs.exportTariff, " Transport Fees: ", obs.transportFees)
+        # print("South Market - Bid: ", south_bid, " Adjusted Bid: ", south_adjusted_bid)
+        # print("South Market - Ask: ", south_ask, " Adjusted Ask: ", south_adjusted_ask)
 
         conversion_requests = abs(position)
         orders = []
+        total_bids = 0
 
         # very extreme arbitrage
         for bid, amount in reversed(order_depth.buy_orders.items()):
+            total_bids += amount
             if bid > south_adjusted_ask:
                 if amount > maxToSell:
                     orders.append(Order("ORCHIDS", bid, -maxToSell))
                     maxToSell = 0
                 else:
                     orders.append(Order("ORCHIDS", bid, -amount))
-                    maxToSell -= amount
+                    maxToSell -= abs(amount)
+
+        print("Total Bids: ", total_bids)
+        print("Best Bid: ", north_best_bid_amount)
 
         for ask, amount in reversed(order_depth.sell_orders.items()):
             if ask < south_adjusted_bid:
@@ -114,33 +119,11 @@ class Trader:
                     maxToBuy = 0
                 else:
                     orders.append(Order("ORCHIDS", ask, -amount))
-                    maxToBuy += amount
+                    maxToBuy -= abs(amount)
 
-        #both bid and ask are higher/lower
-        if north_adjusted_best_ask >= south_adjusted_ask:
-            print("Action: Submit limit order on North (higher ask), immediate convert if filled")
-            difference = north_adjusted_best_ask - south_adjusted_ask
-            if difference <= 1:
-                price = north_adjusted_best_ask
-            if difference <= 2.5:
-                price = south_adjusted_ask + 1
-            else:
-                price = south_adjusted_ask + 2.5
-            ##ADD CODE ABOUT A MINI ORDER HERE
-            price = int(math.floor(price))
-            orders.append(Order("ORCHIDS", price, -maxToSell))
+        orders.append(Order("ORCHIDS", round(south_adjusted_ask + 2.05), -maxToSell))
 
-        if north_best_bid < south_adjusted_bid:
-            print("Action: Submit limit order on North (lower bid), immediate convert if filled")
-            difference = south_adjusted_bid - north_best_bid
-            if difference <= 1:
-                price = north_best_bid
-            if difference <= 2.5:
-                price = south_adjusted_bid - 1
-            else:
-                price = south_adjusted_bid - 2.5
-            price = int(math.ceil(price))
-            orders.append(Order("ORCHIDS", price, maxToBuy))
+        orders.append(Order("ORCHIDS", round(south_adjusted_bid - 2.05), maxToBuy))
 
         return orders, conversion_requests
 
