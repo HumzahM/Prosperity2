@@ -87,7 +87,7 @@ class Trader:
         maxToBuy = 100 # positive number -> max is 40 
         maxToSell = 100 # positive number -> max is 40
 
-        print("Position: ", position)
+        # print("Position: ", position)
         # print("North Market - Best Bid: ", north_best_bid,)
         # print("North Market - Best Ask: ", north_best_ask, " Adjusted Ask: ", north_adjusted_best_ask)
         # print("Import Tariff: ", obs.importTariff, " Export Tariff: ", obs.exportTariff, " Transport Fees: ", obs.transportFees)
@@ -127,9 +127,76 @@ class Trader:
 
         return orders, conversion_requests
 
+    def basketArbitrage(self, order_depth: OrderDepth, positions, positionLimits):
+        basket_position = positions.get('GIFT_BASKET', 0)
+        basket_maxToBuy = positionLimits.get('GIFT_BASKET', 0) - positions.get('GIFT_BASKET', 0)
+        basket_maxToSell = positions.get('GIFT_BASKET', 0) + positionLimits.get('GIFT_BASKET', 0)
+        basket_best_bid, basket_best_bid_amount = list(order_depth['GIFT_BASKET'].buy_orders.items())[0]
+        basket_best_ask, basket_best_ask_amount = list(order_depth['GIFT_BASKET'].sell_orders.items())[0]
+        basket_midpoint = (basket_best_bid + basket_best_ask) / 2
+
+        chocolate_maxToBuy = positionLimits.get('CHOCOLATE', 0) - positions.get('CHOCOLATE', 0)
+        chocolate_maxToSell = positions.get('CHOCOLATE', 0) + positionLimits.get('CHOCOLATE', 0)
+        chocolate_best_bid, chocolate_best_bid_amount = list(order_depth['CHOCOLATE'].buy_orders.items())[0]
+        chocolate_best_ask, chocolate_best_ask_amount = list(order_depth['CHOCOLATE'].sell_orders.items())[0]
+        chocolate_midpoint = (chocolate_best_bid + chocolate_best_ask) / 2
+
+        roses_maxToBuy = positionLimits.get('ROSES', 0) - positions.get('ROSES', 0)
+        roses_maxToSell = positions.get('ROSES', 0) + positionLimits.get('ROSES', 0)
+        roses_best_bid, roses_best_bid_amount = list(order_depth['ROSES'].buy_orders.items())[0]
+        roses_best_ask, roses_best_ask_amount = list(order_depth['ROSES'].sell_orders.items())[0]
+        roses_midpoint = (roses_best_bid + roses_best_ask) / 2
+
+        strawberries_maxToBuy = positionLimits.get('STRAWBERRIES', 0) - positions.get('STRAWBERRIES', 0)
+        strawberries_maxToSell = positions.get('STRAWBERRIES', 0) + positionLimits.get('STRAWBERRIES', 0)
+        strawberries_best_bid, strawberries_best_bid_amount = list(order_depth['STRAWBERRIES'].buy_orders.items())[0]
+        strawberries_best_ask, strawberries_best_ask_amount = list(order_depth['STRAWBERRIES'].sell_orders.items())[0]
+        strawberries_midpoint = (strawberries_best_bid + strawberries_best_ask) / 2
+
+        hold_price = 20
+        premuim = 375
+        orders = {}
+
+        combined_price = strawberries_midpoint*6 + chocolate_midpoint*4 + roses_midpoint + premuim
+
+        #buy products sell basket
+        if(basket_midpoint - combined_price > hold_price):
+            if basket_maxToSell > 0:
+                print("selling basket")
+                orders['GIFT_BASKET'] = [Order('GIFT_BASKET', basket_best_bid, -min(basket_maxToSell, abs(basket_best_ask_amount)))]
+            if chocolate_maxToBuy > 0:
+                orders['CHOCOLATE'] = [Order('CHOCOLATE', chocolate_best_ask, min(chocolate_maxToBuy, abs(chocolate_best_bid_amount)))]
+            if roses_maxToBuy > 0:
+                orders['ROSES'] = [Order('ROSES', roses_best_ask, min(roses_maxToBuy, abs(roses_best_bid_amount)))]
+            if strawberries_maxToBuy > 0:
+                orders['STRAWBERRIES'] = [Order('STRAWBERRIES', strawberries_best_ask, min(strawberries_maxToBuy, abs(strawberries_best_bid_amount)))]
+
+        #sell products buy basket
+        elif(combined_price - basket_midpoint > hold_price):
+            if basket_maxToBuy > 0:
+                print("buying basket")
+                orders['GIFT_BASKET'] = [Order('GIFT_BASKET', basket_best_ask, min(basket_maxToBuy, abs(basket_best_bid_amount)))]
+            if chocolate_maxToSell > 0:
+                orders['CHOCOLATE'] = [Order('CHOCOLATE', chocolate_best_bid, -min(chocolate_maxToSell, abs(chocolate_best_ask_amount)))]
+            if roses_maxToSell > 0:
+                orders['ROSES'] = [Order('ROSES', roses_best_bid, -min(roses_maxToSell, abs(roses_best_ask_amount)))]
+            if strawberries_maxToSell > 0:
+                orders['STRAWBERRIES'] = [Order('STRAWBERRIES', strawberries_best_bid, -min(strawberries_maxToSell, abs(strawberries_best_ask_amount)))]
+
+        else:
+            if basket_position > 0 and combined_price - basket_midpoint < 0:
+                print("closing long position")
+                orders['GIFT_BASKET'] = [Order('GIFT_BASKET', basket_best_bid, -min(basket_position, abs(basket_best_ask_amount)))]
+            elif basket_position < 0 and combined_price - basket_midpoint > 0:
+                print("closing short position")
+                orders['GIFT_BASKET'] = [Order('GIFT_BASKET', basket_best_ask, min(-basket_position, abs(basket_best_bid_amount)))]
+                
+
+        return orders
+        
 
     def run(self, state: TradingState):
-        POSITION_LIMITS = {'AMETHYSTS': 20, 'STARFRUIT': 20, 'ORCHIDS': 100}
+        POSITION_LIMITS = {'AMETHYSTS': 20, 'STARFRUIT': 20, 'ORCHIDS': 100, 'CHOCOLATE': 250, 'STRAWBERRIES': 350, 'ROSES': 60, 'GIFT_BASKET': 60}
         BID_ASK_SPREADS = {'AMETHYSTS': 3, 'STARFRUIT': 1.9} #half of spread
         STARFRUIT_DATA_LENGTH = 5
         result = {}
@@ -150,7 +217,6 @@ class Trader:
                 print(f"Error decoding traderData: {e}")
                 # Handle the exception appropriately, maybe log it or set a default value
                 # For this example, decoded_data remains an empty dictionary
-
         # Check if 'STARFRUIT_HISTORY' exists in decoded_data, otherwise initialize it
         starfruit_history = decoded_data.get('STARFRUIT_HISTORY', [])
         starfruit_price = 0
@@ -196,6 +262,14 @@ class Trader:
         #######################
 
         result['ORCHIDS'], conversion_requests = self.orchidArbitrage(state.order_depths['ORCHIDS'], state.position.get('ORCHIDS', 0), POSITION_LIMITS['ORCHIDS'], state.observations.conversionObservations['ORCHIDS'], state.own_trades.get('ORCHIDS', []), state.timestamp)
+
+        #######################
+        basket_orders = self.basketArbitrage(state.order_depths, state.position, POSITION_LIMITS)
+        result['GIFT_BASKET'] = basket_orders.get('GIFT_BASKET', [])
+        #result['CHOCOLATE'] = basket_orders.get('CHOCOLATE', [])
+        #result['ROSES'] = basket_orders.get('ROSES', [])
+        #result['STRAWBERRIES'] = basket_orders.get('STRAWBERRIES', [])
+
         traderData = {'STARFRUIT_HISTORY': starfruit_history}
         return result, conversion_requests, jsonpickle.encode(traderData)
             
