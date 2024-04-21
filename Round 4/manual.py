@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Range of avg values from 0 to 100
-avg_values = range(1, 100)
+avg_values = range(75, 100)
 
 # Storage for optimal bids
 optimal_bid1 = []
@@ -44,14 +44,14 @@ for avg in avg_values:
 # Plotting the updated results with max profit on a secondary y-axis
 
 fig, ax1 = plt.subplots(figsize=(10, 5))
-ax1.plot(range(1, 100), optimal_bid1, label='Optimal bid1')
-ax1.plot(range(1, 100), optimal_bid2, label='Optimal bid2', linestyle='--')
+ax1.plot(range(75, 100), optimal_bid1, label='Optimal bid1')
+ax1.plot(range(75, 100), optimal_bid2, label='Optimal bid2')
 ax1.set_xlabel('Average (avg)')
 ax1.set_ylabel('Bids (bid1 and bid2)')
 ax1.legend(loc='upper left')
 ax1.grid(True)
 ax2 = ax1.twinx()
-ax2.plot(range(1, 100), max_profits, label='Max Profit', color='green', linestyle=':')
+ax2.plot(range(75, 100), max_profits, label='Max Profit', color='green', linestyle=':')
 ax2.set_ylim(0, 21)
 ax2.set_ylabel('Max Profit')
 ax2.legend(loc='upper right')

@@ -254,7 +254,7 @@ class Trader:
         """
         T = 250/252 #might need to tune this
         K = 10000
-        sigma = 0 #need to find this
+        sigma =  0.00094345 #need to find this
         # Calculate d1 and d2 parameters
         d1 = (np.log(S / K) + (0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
         d2 = d1 - sigma * np.sqrt(T)
