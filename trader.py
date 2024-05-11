@@ -5,18 +5,6 @@ import jsonpickle
 import numpy as np
 
 class Trader:
-    def predict_next(self, sequence: list[float]) -> float:
-        #coef = [-0.15, -0.05,  0.05,  0.15,  1] #gets 3.21K
-        coef = [1]
-        if(len(sequence) != len(coef)):
-            #print("Invalid sequence length, returning last value")
-            return sequence[-1]
-        
-        next_price = 0
-        for i, val in enumerate(sequence):
-            next_price += val * coef[i]
-
-        return next_price
 
     def ordersSimpleMarketMaking(self, product: str, order_depth: OrderDepth, position: int, positionLimit: int, fair_price: int, bid_ask_spread) -> List[Order]:
 
@@ -87,13 +75,6 @@ class Trader:
 
         maxToBuy = 100 # positive number -> max is 40 
         maxToSell = 100 # positive number -> max is 40
-
-        # print("Position: ", position)
-        # print("North Market - Best Bid: ", north_best_bid,)
-        # print("North Market - Best Ask: ", north_best_ask, " Adjusted Ask: ", north_adjusted_best_ask)
-        # print("Import Tariff: ", obs.importTariff, " Export Tariff: ", obs.exportTariff, " Transport Fees: ", obs.transportFees)
-        # print("South Market - Bid: ", south_bid, " Adjusted Bid: ", south_adjusted_bid)
-        # print("South Market - Ask: ", south_ask, " Adjusted Ask: ", south_adjusted_ask)
 
         conversion_requests = abs(position)
         orders = []
@@ -166,7 +147,7 @@ class Trader:
             maxToBuy[product] = positionLimits.get(product, 0) - positions.get(product, 0)
             maxToSell[product] = positions.get(product, 0) + positionLimits.get(product, 0)
 
-            print(f"Product: {product}, Positition:{positions.get(product,0)}")
+            #print(f"Product: {product}, Positition:{positions.get(product,0)}")
 
             best_bid[product], best_bid_amount[product] = list(order_depth[product].buy_orders.items())[0]
             best_ask[product], best_ask_amount[product] = list(order_depth[product].sell_orders.items())[0]
@@ -179,33 +160,16 @@ class Trader:
 
         #Arbitrage logic: buy components and sell basket, or buy basket and sell components
         if midpoints["GIFT_BASKET"] - combined_price > move_price:
-            print("Selling basket, buying product")
             orders["GIFT_BASKET"] = [Order("GIFT_BASKET", best_bid["GIFT_BASKET"], -1*min(maxToSell["GIFT_BASKET"], abs(best_bid_amount["GIFT_BASKET"])))]
-            for product in products[1:]:  # Exclude GIFT_BASKET
-                if maxToBuy[product] > 0:
-                    orders[product] = [Order(product, best_ask[product], min(maxToBuy[product], abs(best_ask_amount[product])))]
 
         elif combined_price - midpoints["GIFT_BASKET"] > move_price:
-            print("Buying basket")
             orders["GIFT_BASKET"] = [Order("GIFT_BASKET", best_ask["GIFT_BASKET"], min(maxToBuy["GIFT_BASKET"], abs(best_ask_amount["GIFT_BASKET"])))]
-            for product in products[1:]:  # Exclude GIFT_BASKET
-                if maxToSell[product] > 0:
-                    orders[product] = [Order(product, best_bid[product], -1*min(maxToSell[product], abs(best_bid_amount[product])))]
 
         else:
             if positions.get("GIFT_BASKET", 0) > 0 and midpoints["GIFT_BASKET"] - combined_price > hold_price:
-                print("Closing Long Position (Selling Basket)")
                 orders["GIFT_BASKET"] = [Order("GIFT_BASKET", best_bid["GIFT_BASKET"], -1*min(maxToSell["GIFT_BASKET"], abs(best_bid_amount["GIFT_BASKET"])))]
-                for product in products[1:]:
-                    if maxToBuy[product] > 0:
-                        orders[product] = [Order(product, best_ask[product], min(maxToBuy[product], abs(best_ask_amount[product])))]
-
             elif positions.get("GIFT_BASKET", 0) < 0 and combined_price - midpoints["GIFT_BASKET"] > hold_price:
-                print("Closing Short Position (Buying Basket)")
                 orders["GIFT_BASKET"] = [Order("GIFT_BASKET", best_ask["GIFT_BASKET"], min(maxToBuy["GIFT_BASKET"], abs(best_ask_amount["GIFT_BASKET"])))]
-                for product in products[1:]:
-                    if maxToSell[product] > 0:
-                        orders[product] = [Order(product, best_bid[product], -1*min(maxToSell[product], abs(best_bid_amount[product])))]
         
                 
         return orders  
@@ -263,11 +227,42 @@ class Trader:
         option_price = S * Trader.norm_cdf(d1) - K * Trader.norm_cdf(d2)
         
         return option_price
+    
+    def getFairPrice(self, product: str, order_depth: OrderDepth, own_trades: List[Order], previous_fair_price: float, informed_traders: List[str], timestamp) -> float:
+        
+        #print("Product: ", product)
+        #print("Previous fair price: ", previous_fair_price)
+        #print("Informed Traders: ", informed_traders)
+        #print("Own Trades: ", own_trades)
+        if(previous_fair_price == 0 or len(informed_traders) == 0 or len(own_trades) == 0):
+            price = 0
+            volume = 0
+            for ask, amount in order_depth.sell_orders.items():
+                price += abs(ask*amount)
+                volume += abs(amount)
+            for bid, amount in order_depth.buy_orders.items():
+                price += abs(bid*amount)
+                volume += abs(amount)
+            if(volume != 0):
+                return price / volume
+            else:
+                return 0
+            
+        else:
+            last_own_trade = own_trades[-1]
+            if(last_own_trade.timestamp == timestamp - 100):
+                if(last_own_trade.buyer in informed_traders or last_own_trade.seller in informed_traders):
+                    print("Updating fair price of ", product, " to ", last_own_trade.price, " from ", previous_fair_price)
+                    return last_own_trade.price
+            return previous_fair_price
+
+
+
 
     def run(self, state: TradingState):
         POSITION_LIMITS = {'AMETHYSTS': 20, 'STARFRUIT': 20, 'ORCHIDS': 100, 'CHOCOLATE': 250, 'STRAWBERRIES': 350, 'ROSES': 60, 'GIFT_BASKET': 60, 'COCONUT': 300, 'COCONUT_COUPON': 600}
         BID_ASK_SPREADS = {'AMETHYSTS': 3, 'STARFRUIT': 1.9, 'COCONUT': 1, 'COCONUT_COUPON':10} #half of spread
-        STARFRUIT_DATA_LENGTH = 5
+        INFORMED_TRADERS = {'STARFRUIT': ['Remy', 'Vinnie', 'Ruby', 'Vladimir', 'Rhianna'], 'ROSES': ['Vladimir'], 'CHOCOLATE': ['Remy', 'Vladimir'], 'STRAWBERRIES': ['Vladimir'], 'GIFT_BASKET': ['Rhianna', 'Ruby'], 'COCONUT_COUPON': ['Vinnie', 'Rhianna'], 'COCONUT': ['Raj', 'Rhianna']}
         result = {}
         #######################
         #Amethysts
@@ -278,36 +273,19 @@ class Trader:
         #Starfruit
         #######################
 
-        decoded_data = {}
+        fair_prices = {'AMETHYSTS': 10000, 'STARFRUIT': 0, 'CHOCOLATE': 0, 'STRAWBERRIES': 0, 'ROSES': 0, 'GIFT_BASKET': 0, 'COCONUT': 0, 'COCONUT_COUPON': 0}
         if state.traderData:
             try:
-                decoded_data = jsonpickle.decode(state.traderData)
+                fair_prices = jsonpickle.decode(state.traderData)
             except Exception as e:
                 print(f"Error decoding traderData: {e}")
                 # Handle the exception appropriately, maybe log it or set a default value
                 # For this example, decoded_data remains an empty dictionary
-        # Check if 'STARFRUIT_HISTORY' exists in decoded_data, otherwise initialize it
-        starfruit_history = decoded_data.get('STARFRUIT_HISTORY', [])
-        starfruit_price = 0
-        starfruit_volume = 0
-        for ask, amount in state.order_depths['STARFRUIT'].sell_orders.items():
-            starfruit_price += abs(ask*amount)
-            starfruit_volume += abs(amount)
 
-        for bid, amount in state.order_depths['STARFRUIT'].buy_orders.items():
-            starfruit_price += abs(bid*amount)
-            starfruit_volume += abs(amount)
-
-        if starfruit_volume != 0:
-            starfruit_midpoint = starfruit_price / starfruit_volume
-        else:
-            starfruit_midpoint = starfruit_history[-1]
-
-        starfruit_history.append(starfruit_midpoint)
-        starfruit_history = starfruit_history[-STARFRUIT_DATA_LENGTH:]
-        starfruit_fair_price = self.predict_next(starfruit_history)
-
-        result['STARFRUIT'] = self.ordersSimpleMarketMaking('STARFRUIT', state.order_depths['STARFRUIT'], state.position.get('STARFRUIT', 0), POSITION_LIMITS['STARFRUIT'], starfruit_fair_price, BID_ASK_SPREADS['STARFRUIT'])
+        for product in fair_prices:
+            fair_prices[product] = self.getFairPrice(product, state.order_depths[product], state.own_trades.get(product, []), fair_prices[product], INFORMED_TRADERS.get(product, []), state.timestamp)
+            if(fair_prices[product] != 0):
+                result[product] = self.ordersSimpleMarketMaking(product, state.order_depths[product], state.position.get(product, 0), POSITION_LIMITS[product], fair_prices[product], BID_ASK_SPREADS.get(product, 2))
 
         #######################
         #Orchids
@@ -317,7 +295,7 @@ class Trader:
 
         #######################
         basket_orders = self.basketArbitrage(state.order_depths, state.position, POSITION_LIMITS)
-        result['GIFT_BASKET'] = basket_orders.get('GIFT_BASKET', [])
+        #result['GIFT_BASKET'] = basket_orders.get('GIFT_BASKET', [])
         
         coconut_best_bid, coconut_best_bid_amount = list(state.order_depths['COCONUT'].buy_orders.items())[0]
         coconut_best_ask, coconut_best_ask_amount = list(state.order_depths['COCONUT'].sell_orders.items())[0]
@@ -329,13 +307,14 @@ class Trader:
 
         #coupon_fair_price = (Trader.black_scholes_call(coconut_midpoint) + coupon_midpoint) / 2
         coupon_fair_price = Trader.black_scholes_call(coconut_midpoint)
-        print("Coupon Midpoint: ", coupon_midpoint)
-        print("Black Scholes Call: ", Trader.black_scholes_call(coconut_midpoint))
+        #print("Coupon Midpoint: ", coupon_midpoint)
+        #print("Black Scholes Call: ", Trader.black_scholes_call(coconut_midpoint))
 
-        result['COCONUT_COUPON'] = self.ordersSimpleMarketMaking('COCONUT_COUPON', state.order_depths['COCONUT_COUPON'], state.position.get('COCONUT_COUPON', 0), POSITION_LIMITS['COCONUT_COUPON'], coupon_fair_price, BID_ASK_SPREADS['COCONUT_COUPON'])
+        #result['COCONUT_COUPON'] = self.ordersSimpleMarketMaking('COCONUT_COUPON', state.order_depths['COCONUT_COUPON'], state.position.get('COCONUT_COUPON', 0), POSITION_LIMITS['COCONUT_COUPON'], coupon_fair_price, BID_ASK_SPREADS['COCONUT_COUPON'])
         #result['COCONUT'] = self.ordersSimpleMarketMaking('COCONUT', state.order_depths['COCONUT'], state.position.get('COCONUT', 0), POSITION_LIMITS['COCONUT'], coconut_midpoint, BID_ASK_SPREADS['COCONUT'])
 
-        traderData = {'STARFRUIT_HISTORY': starfruit_history}
-        return result, conversion_requests, jsonpickle.encode(traderData)
+        #traderData = any dictionary we want to save for the next run
+        
+        return result, conversion_requests, jsonpickle.encode(fair_prices)
             
 
