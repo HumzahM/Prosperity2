@@ -1,0 +1,1 @@
+The IMC Prosperity Trading Competition is a 15 day, 5 round trading competition hosted by IMC. Each round they introduced new asset(s) to trade with different patterns, such as direct arbitrage or pairs trading. 
